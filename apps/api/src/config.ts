@@ -226,6 +226,13 @@ const configSchema = z.object({
 
   // External Services
   PLAYWRIGHT_MICROSERVICE_URL: z.string().optional(),
+  // [groundcraft] A SECOND browser sidecar whose container alone carries
+  // PROXY_SERVER (paid residential). Self-hosted Firecrawl has no fire-engine, so
+  // the `stealthProxy` feature flag was a dead no-op; this URL backs the
+  // `playwright;stealthproxy` engine that implements it. Keeping the proxy env on
+  // that container ONLY is what makes residential escalation-only instead of
+  // routing 100% of traffic through metered GB.
+  PLAYWRIGHT_PROXIED_MICROSERVICE_URL: z.string().optional(),
   HTML_TO_MARKDOWN_SERVICE_URL: z.string().optional(),
   SMART_SCRAPE_API_URL: z.string().optional(),
 

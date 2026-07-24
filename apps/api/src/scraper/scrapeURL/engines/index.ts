@@ -12,6 +12,7 @@ import { fetchMaxReasonableTime, scrapeURLWithFetch } from "./fetch";
 import {
   playwrightMaxReasonableTime,
   scrapeURLWithPlaywright,
+  scrapeURLWithPlaywrightProxied,
 } from "./playwright";
 import { indexMaxReasonableTime, scrapeURLWithIndex } from "./index/index";
 import {
@@ -39,6 +40,8 @@ export type Engine =
   | "fire-engine;tlsclient"
   | "fire-engine;tlsclient;stealth"
   | "playwright"
+  // [groundcraft] escalation tier: playwright via the residential-proxied sidecar
+  | "playwright;stealthproxy"
   | "fetch"
   | "pdf"
   | "document"
@@ -53,6 +56,10 @@ const useFireEngine =
 const usePlaywright =
   config.PLAYWRIGHT_MICROSERVICE_URL !== "" &&
   config.PLAYWRIGHT_MICROSERVICE_URL !== undefined;
+// [groundcraft] only enabled when the proxied sidecar is configured
+const usePlaywrightProxied =
+  config.PLAYWRIGHT_PROXIED_MICROSERVICE_URL !== "" &&
+  config.PLAYWRIGHT_PROXIED_MICROSERVICE_URL !== undefined;
 const useWikipedia =
   config.WIKIPEDIA_ENTERPRISE_USERNAME !== undefined &&
   config.WIKIPEDIA_ENTERPRISE_USERNAME !== "" &&
@@ -77,6 +84,7 @@ const engines: Engine[] = [
       ]
     : []),
   ...(usePlaywright ? ["playwright" as const] : []),
+  ...(usePlaywrightProxied ? ["playwright;stealthproxy" as const] : []),
   "fetch",
   "pdf",
   "document",
@@ -176,6 +184,7 @@ const engineHandlers: {
   "fire-engine;tlsclient": scrapeURLWithFireEngineTLSClient,
   "fire-engine;tlsclient;stealth": scrapeURLWithFireEngineTLSClient,
   playwright: scrapeURLWithPlaywright,
+  "playwright;stealthproxy": scrapeURLWithPlaywrightProxied,
   fetch: scrapeURLWithFetch,
   pdf: scrapePDF,
   document: scrapeDocument,
@@ -201,6 +210,7 @@ const engineMRTs: {
   "fire-engine;tlsclient;stealth": meta =>
     fireEngineMaxReasonableTime(meta, "tlsclient"),
   playwright: playwrightMaxReasonableTime,
+  "playwright;stealthproxy": playwrightMaxReasonableTime,
   fetch: fetchMaxReasonableTime,
   pdf: pdfMaxReasonableTime,
   document: documentMaxReasonableTime,
@@ -364,6 +374,33 @@ const engineOptions: {
       disableAdblock: false,
     },
     quality: 20,
+  },
+  // [groundcraft] Same capabilities as `playwright`, but declared
+  // stealthProxy-capable and given NEGATIVE quality. Negative quality means
+  // buildFallbackList drops it whenever any positive-quality engine qualifies —
+  // so it is reachable ONLY when the stealthProxy flag is set, i.e. on the
+  // proxy:auto 401/403/429 escalation. That is precisely what keeps paid
+  // residential GB spent on the hard minority instead of all traffic.
+  "playwright;stealthproxy": {
+    features: {
+      actions: false,
+      waitFor: true,
+      screenshot: false,
+      "screenshot@fullScreen": false,
+      pdf: false,
+      document: false,
+      audio: false,
+      video: false,
+      atsv: false,
+      location: false,
+      mobile: false,
+      skipTlsVerification: true,
+      useFastMode: false,
+      stealthProxy: true,
+      branding: false,
+      disableAdblock: false,
+    },
+    quality: -2,
   },
   "fire-engine;tlsclient": {
     features: {

@@ -8,8 +8,32 @@ import { getInnerJson } from "@mendable/firecrawl-rs";
 export async function scrapeURLWithPlaywright(
   meta: Meta,
 ): Promise<EngineScrapeResult> {
-  const response = await robustFetch({
+  return await scrapeWithPlaywrightSidecar(meta, {
     url: config.PLAYWRIGHT_MICROSERVICE_URL!,
+    proxyUsed: "basic",
+  });
+}
+
+// [groundcraft] Escalation tier: identical contract, but pointed at the sidecar
+// container that carries PROXY_SERVER (paid residential). Registered as the
+// `playwright;stealthproxy` engine with NEGATIVE quality, so the fork's own
+// `proxy:auto` retry — AddFeatureError(["stealthProxy"]) on 401/403/429 — is the
+// only thing that ever selects it. Everything else stays direct and free.
+export async function scrapeURLWithPlaywrightProxied(
+  meta: Meta,
+): Promise<EngineScrapeResult> {
+  return await scrapeWithPlaywrightSidecar(meta, {
+    url: config.PLAYWRIGHT_PROXIED_MICROSERVICE_URL!,
+    proxyUsed: "stealth",
+  });
+}
+
+async function scrapeWithPlaywrightSidecar(
+  meta: Meta,
+  sidecar: { url: string; proxyUsed: "basic" | "stealth" },
+): Promise<EngineScrapeResult> {
+  const response = await robustFetch({
+    url: sidecar.url,
     headers: {
       "Content-Type": "application/json",
     },
@@ -43,7 +67,7 @@ export async function scrapeURLWithPlaywright(
     error: response.pageError,
     contentType: response.contentType,
 
-    proxyUsed: "basic",
+    proxyUsed: sidecar.proxyUsed,
   };
 }
 
