@@ -14,6 +14,7 @@ import {
   scrapeURLWithPlaywright,
   scrapeURLWithPlaywrightProxied,
 } from "./playwright";
+import { scrapeURLWithTLSFetch, tlsFetchMaxReasonableTime } from "./tlsfetch";
 import { indexMaxReasonableTime, scrapeURLWithIndex } from "./index/index";
 import {
   scrapeURLWithWikipedia,
@@ -42,6 +43,8 @@ export type Engine =
   | "playwright"
   // [groundcraft] escalation tier: playwright via the residential-proxied sidecar
   | "playwright;stealthproxy"
+  // [groundcraft] TLS-impersonating fetch (curl_cffi sidecar)
+  | "tlsfetch"
   | "fetch"
   | "pdf"
   | "document"
@@ -60,6 +63,9 @@ const usePlaywright =
 const usePlaywrightProxied =
   config.PLAYWRIGHT_PROXIED_MICROSERVICE_URL !== "" &&
   config.PLAYWRIGHT_PROXIED_MICROSERVICE_URL !== undefined;
+const useTLSFetch =
+  config.TLSFETCH_MICROSERVICE_URL !== "" &&
+  config.TLSFETCH_MICROSERVICE_URL !== undefined;
 const useWikipedia =
   config.WIKIPEDIA_ENTERPRISE_USERNAME !== undefined &&
   config.WIKIPEDIA_ENTERPRISE_USERNAME !== "" &&
@@ -85,6 +91,7 @@ const engines: Engine[] = [
     : []),
   ...(usePlaywright ? ["playwright" as const] : []),
   ...(usePlaywrightProxied ? ["playwright;stealthproxy" as const] : []),
+  ...(useTLSFetch ? ["tlsfetch" as const] : []),
   "fetch",
   "pdf",
   "document",
@@ -185,6 +192,7 @@ const engineHandlers: {
   "fire-engine;tlsclient;stealth": scrapeURLWithFireEngineTLSClient,
   playwright: scrapeURLWithPlaywright,
   "playwright;stealthproxy": scrapeURLWithPlaywrightProxied,
+  tlsfetch: scrapeURLWithTLSFetch,
   fetch: scrapeURLWithFetch,
   pdf: scrapePDF,
   document: scrapeDocument,
@@ -211,6 +219,7 @@ const engineMRTs: {
     fireEngineMaxReasonableTime(meta, "tlsclient"),
   playwright: playwrightMaxReasonableTime,
   "playwright;stealthproxy": playwrightMaxReasonableTime,
+  tlsfetch: tlsFetchMaxReasonableTime,
   fetch: fetchMaxReasonableTime,
   pdf: pdfMaxReasonableTime,
   document: documentMaxReasonableTime,
@@ -401,6 +410,29 @@ const engineOptions: {
       disableAdblock: false,
     },
     quality: -2,
+  },
+  // [groundcraft] Beats plain `fetch` (5) on fingerprint, yields to the browser
+  // (20) when JS is genuinely required.
+  tlsfetch: {
+    features: {
+      actions: false,
+      waitFor: false,
+      screenshot: false,
+      "screenshot@fullScreen": false,
+      pdf: false,
+      document: false,
+      audio: false,
+      video: false,
+      atsv: false,
+      location: false,
+      mobile: false,
+      skipTlsVerification: true,
+      useFastMode: true,
+      stealthProxy: false,
+      branding: false,
+      disableAdblock: false,
+    },
+    quality: 10,
   },
   "fire-engine;tlsclient": {
     features: {

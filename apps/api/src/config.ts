@@ -233,6 +233,9 @@ const configSchema = z.object({
   // that container ONLY is what makes residential escalation-only instead of
   // routing 100% of traffic through metered GB.
   PLAYWRIGHT_PROXIED_MICROSERVICE_URL: z.string().optional(),
+  // [groundcraft] TLS-impersonating fetch sidecar (curl_cffi). Restores the
+  // cloud-only `fire-engine;tlsclient` capability for self-hosters.
+  TLSFETCH_MICROSERVICE_URL: z.string().optional(),
   HTML_TO_MARKDOWN_SERVICE_URL: z.string().optional(),
   SMART_SCRAPE_API_URL: z.string().optional(),
 
