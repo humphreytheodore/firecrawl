@@ -193,6 +193,26 @@ interface UrlModel {
 
 let browser: Browser;
 
+// [groundcraft] The real UA of a headless Chromium announces "HeadlessChrome",
+// which is a blatant tell — but replacing it with a RANDOM UA (the stock
+// behaviour) is worse, because the claimed browser then contradicts the actual
+// engine, Client Hints and WebGL. So we take the browser's OWN user-agent —
+// correct version, correct platform, internally consistent — and strip only the
+// Headless marker. Computed once at launch.
+let stealthUserAgent: string | undefined;
+
+const deriveStealthUserAgent = async () => {
+  try {
+    const probe = await browser.newContext();
+    const page = await probe.newPage();
+    const ua = await page.evaluate(() => navigator.userAgent);
+    stealthUserAgent = ua.replace(/HeadlessChrome/g, 'Chrome');
+    await probe.close();
+  } catch {
+    stealthUserAgent = undefined; // fall back to the browser default
+  }
+};
+
 const initializeBrowser = async () => {
   browser = await chromium.launch({
     headless: true,
@@ -209,6 +229,7 @@ const initializeBrowser = async () => {
       '--disable-blink-features=AutomationControlled',
     ],
   });
+  await deriveStealthUserAgent();
 };
 
 const createContext = async (
@@ -224,7 +245,7 @@ const createContext = async (
   // inconsistency anti-bot vendors check for directly (UA vs Client Hints vs
   // navigator/WebGL). We now keep patchright's real, coherent UA unless the
   // caller explicitly overrides it.
-  const userAgent = userAgentOverride;
+  const userAgent = userAgentOverride || stealthUserAgent;
   const viewport = { width: 1280, height: 800 };
   const securityState: ContextSecurityState = {
     blockedNavigationRequestUrl: null,
