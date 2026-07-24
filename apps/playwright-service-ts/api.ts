@@ -1,12 +1,19 @@
 import express, { Request, Response } from 'express';
 import {
-  chromium,
+  chromium as playwrightChromium,
   Browser,
   BrowserContext,
   Route,
   Request as PlaywrightRequest,
   Page,
 } from 'playwright';
+
+// [groundcraft] Stealth: patchright is a drop-in Playwright fork that patches the
+// automation tells stock Chromium leaks (navigator.webdriver, the Runtime.enable
+// CDP leak, chrome.runtime). Types stay from playwright; only the runtime driver
+// is swapped, so this compiles unchanged. Self-hosted Firecrawl has no
+// Fire-engine, so this is our entire browser-fingerprint defence.
+const chromium: typeof playwrightChromium = require('patchright').chromium;
 import dotenv from 'dotenv';
 import UserAgent from 'user-agents';
 import { getError } from './helpers/get_error';
@@ -197,6 +204,9 @@ const initializeBrowser = async () => {
       '--no-first-run',
       '--no-zygote',
       '--disable-gpu',
+      // [groundcraft] drop the AutomationControlled blink feature — the single
+      // most-checked headless tell after navigator.webdriver.
+      '--disable-blink-features=AutomationControlled',
     ],
   });
 };
@@ -208,17 +218,26 @@ const createContext = async (
   context: BrowserContext;
   securityState: ContextSecurityState;
 }> => {
-  const userAgent = userAgentOverride || new UserAgent().toString();
+  // [groundcraft] Fingerprint consistency beats fingerprint randomness. Stock
+  // behaviour injected a RANDOM user-agent (`new UserAgent()`), which regularly
+  // claims Firefox or a mobile device on top of a desktop Chromium — an
+  // inconsistency anti-bot vendors check for directly (UA vs Client Hints vs
+  // navigator/WebGL). We now keep patchright's real, coherent UA unless the
+  // caller explicitly overrides it.
+  const userAgent = userAgentOverride;
   const viewport = { width: 1280, height: 800 };
   const securityState: ContextSecurityState = {
     blockedNavigationRequestUrl: null,
   };
 
   const contextOptions: any = {
-    userAgent,
+    ...(userAgent ? { userAgent } : {}),
     viewport,
     ignoreHTTPSErrors: skipTlsVerification,
     serviceWorkers: 'block',
+    // Coherent locale/timezone rather than the container's bare default.
+    locale: process.env.BROWSER_LOCALE || 'en-GB',
+    timezoneId: process.env.BROWSER_TIMEZONE || 'Africa/Johannesburg',
   };
 
   contextOptions.proxy = {

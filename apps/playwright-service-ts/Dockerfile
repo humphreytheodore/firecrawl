@@ -8,8 +8,11 @@ COPY . .
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright
 
-# Install Playwright dependencies
+# Install Playwright system deps + chromium, then patchright's patched driver.
+# [groundcraft] playwright's --with-deps pulls the system libraries; patchright
+# reuses PLAYWRIGHT_BROWSERS_PATH but ships its own de-fingerprinted driver.
 RUN npx playwright install chromium --with-deps
+RUN npx patchright install chromium
 
 RUN npm run build
 
