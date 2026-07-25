@@ -143,6 +143,7 @@ export type Meta = {
         url?: string;
         status: number;
         proxyUsed: "basic" | "stealth";
+        engineUsed?: string;
         contentType?: string;
       }
     | null
@@ -153,6 +154,7 @@ export type Meta = {
         url?: string;
         status: number;
         proxyUsed: "basic" | "stealth";
+        engineUsed?: string;
         contentType?: string;
       }
     | null
@@ -163,6 +165,7 @@ export type Meta = {
         status: number;
         bodyBuffer: Buffer;
         proxyUsed: "basic" | "stealth";
+        engineUsed?: string;
         contentType?: string;
       }
     | null
@@ -1026,6 +1029,13 @@ async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
         contentType: engineResult.contentType,
         timezone: engineResult.timezone,
         proxyUsed: engineResult.proxyUsed ?? "basic",
+        // [groundcraft] Which rung of the escalation ladder actually served this
+        // scrape. `proxyUsed` only says basic-vs-stealth, so the two FREE rungs
+        // (tlsfetch and the stealth browser) are indistinguishable to a caller —
+        // which makes the ladder's cost story unprovable. Surfacing the engine
+        // name lets the control plane attribute per rung and show real shares
+        // instead of guesses.
+        engineUsed: result.engine,
         ...(fallbackList.find(x =>
           ["index", "index;documents"].includes(x.engine),
         )

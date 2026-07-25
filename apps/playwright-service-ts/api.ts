@@ -189,6 +189,11 @@ interface UrlModel {
   headers?: { [key: string]: string };
   check_selector?: string;
   skip_tls_verification?: boolean;
+  // [groundcraft] Screenshots: self-hosted Firecrawl gates the `screenshot`
+  // format behind Fire-engine, so the stock sidecar never captures one and the
+  // format silently returns empty. We have a real browser here — use it.
+  screenshot?: boolean;
+  screenshot_full_page?: boolean;
 }
 
 let browser: Browser;
@@ -417,6 +422,8 @@ app.post('/scrape', async (req: Request, res: Response) => {
     headers,
     check_selector,
     skip_tls_verification = false,
+    screenshot: wantScreenshot = false,
+    screenshot_full_page: screenshotFullPage = false,
   }: UrlModel = req.body;
 
   console.log(`================= Scrape Request =================`);
@@ -573,10 +580,27 @@ app.post('/scrape', async (req: Request, res: Response) => {
       );
     }
 
+    // [groundcraft] Capture after the content settles, on the same live page.
+    // Never let a screenshot failure sink an otherwise-good scrape.
+    let screenshotB64: string | undefined;
+    if (wantScreenshot && page) {
+      try {
+        const buf = await page.screenshot({
+          fullPage: screenshotFullPage,
+          type: 'png',
+          timeout: 15000,
+        });
+        screenshotB64 = `data:image/png;base64,${buf.toString('base64')}`;
+      } catch (err) {
+        console.warn('screenshot failed:', (err as Error).message);
+      }
+    }
+
     res.json({
       content: result.content,
       pageStatusCode: result.status,
       contentType: result.contentType,
+      ...(screenshotB64 && { screenshot: screenshotB64 }),
       ...(pageError && { pageError }),
     });
   } catch (error) {

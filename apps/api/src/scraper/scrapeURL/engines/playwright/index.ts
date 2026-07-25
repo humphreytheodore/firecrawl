@@ -28,6 +28,13 @@ export async function scrapeURLWithPlaywrightProxied(
   });
 }
 
+function wantsScreenshot(meta: Meta): boolean {
+  return (
+    meta.featureFlags.has("screenshot") ||
+    meta.featureFlags.has("screenshot@fullScreen")
+  );
+}
+
 async function scrapeWithPlaywrightSidecar(
   meta: Meta,
   sidecar: { url: string; proxyUsed: "basic" | "stealth" },
@@ -43,6 +50,9 @@ async function scrapeWithPlaywrightSidecar(
       timeout: meta.abort.scrapeTimeout(),
       headers: meta.options.headers,
       skip_tls_verification: meta.options.skipTlsVerification,
+      // [groundcraft] self-hosted screenshots — the sidecar captures on the live page
+      screenshot: wantsScreenshot(meta),
+      screenshot_full_page: meta.featureFlags.has("screenshot@fullScreen"),
     },
     method: "POST",
     logger: meta.logger.child("scrapeURLWithPlaywright/robustFetch"),
@@ -51,6 +61,7 @@ async function scrapeWithPlaywrightSidecar(
       pageStatusCode: z.number(),
       pageError: z.string().optional(),
       contentType: z.string().optional(),
+      screenshot: z.string().optional(),
     }),
     mock: meta.mock,
     abort: meta.abort.asSignal(),
@@ -66,6 +77,7 @@ async function scrapeWithPlaywrightSidecar(
     statusCode: response.pageStatusCode,
     error: response.pageError,
     contentType: response.contentType,
+    ...(response.screenshot ? { screenshot: response.screenshot } : {}),
 
     proxyUsed: sidecar.proxyUsed,
   };

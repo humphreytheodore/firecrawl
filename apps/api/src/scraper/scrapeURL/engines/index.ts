@@ -367,8 +367,8 @@ const engineOptions: {
     features: {
       actions: false,
       waitFor: true,
-      screenshot: false,
-      "screenshot@fullScreen": false,
+      screenshot: true,
+      "screenshot@fullScreen": true,
       pdf: false,
       document: false,
       audio: false,
@@ -394,8 +394,8 @@ const engineOptions: {
     features: {
       actions: false,
       waitFor: true,
-      screenshot: false,
-      "screenshot@fullScreen": false,
+      screenshot: true,
+      "screenshot@fullScreen": true,
       pdf: false,
       document: false,
       audio: false,

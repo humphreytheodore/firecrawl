@@ -1313,6 +1313,7 @@ export type Document = {
     contentType?: string;
     timezone?: string;
     proxyUsed: "basic" | "stealth";
+        engineUsed?: string;
     cacheState?: "hit" | "miss";
     cachedAt?: string;
     creditsUsed?: number;
