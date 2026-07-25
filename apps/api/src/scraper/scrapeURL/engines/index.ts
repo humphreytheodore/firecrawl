@@ -432,7 +432,13 @@ const engineOptions: {
       branding: false,
       disableAdblock: false,
     },
-    quality: 10,
+    // [groundcraft] ABOVE playwright (20), deliberately. The ladder's whole argument
+    // is cheapest-first: a real-Chrome TLS fingerprint over plain HTTP answers most
+    // server-rendered pages in ~270ms with no browser at all. When a page needs JS
+    // the result comes back too thin and the fallback loop escalates to the browser
+    // on its own — which is exactly the behaviour we want, and what makes the
+    // published rung shares true rather than aspirational.
+    quality: 25,
   },
   "fire-engine;tlsclient": {
     features: {
