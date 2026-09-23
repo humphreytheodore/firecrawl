@@ -119,7 +119,12 @@ export class SSLError extends TransportableError {
 }
 
 export class SiteError extends TransportableError {
-  constructor(public errorCode: string) {
+  constructor(
+    public errorCode: string,
+    // [groundcraft] Optional first-hand detail, e.g. what the upstream proxy itself
+    // answered when it refused the tunnel ("HTTP 402 Payment Required").
+    public detail?: string,
+  ) {
     const errorExplanations: Record<string, string> = {
       ERR_TUNNEL_CONNECTION_FAILED:
         "Firecrawl encountered an internal proxy error while establishing the tunnel.",
@@ -155,7 +160,7 @@ export class SiteError extends TransportableError {
 
     super(
       "SCRAPE_SITE_ERROR",
-      `The URL failed to load in the browser with error code "${errorCode}". ${explanation} ${followUp}`,
+      `The URL failed to load in the browser with error code "${errorCode}". ${explanation}${detail ? ` ${detail}` : ""} ${followUp}`,
     );
   }
 
@@ -163,6 +168,7 @@ export class SiteError extends TransportableError {
     return {
       ...super.serialize(),
       errorCode: this.errorCode,
+      ...(this.detail ? { detail: this.detail } : {}),
     };
   }
 
@@ -170,7 +176,7 @@ export class SiteError extends TransportableError {
     _: ErrorCodes,
     data: ReturnType<typeof this.prototype.serialize>,
   ) {
-    const x = new SiteError(data.errorCode);
+    const x = new SiteError(data.errorCode, data.detail);
     x.stack = data.stack;
     return x;
   }

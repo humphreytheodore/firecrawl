@@ -3,6 +3,7 @@ import { config } from "../../../../config";
 import { EngineScrapeResult } from "..";
 import { Meta } from "../..";
 import { robustFetch } from "../../lib/fetch";
+import { SiteError } from "../../error";
 import { getInnerJson } from "@mendable/firecrawl-rs";
 
 export async function scrapeURLWithPlaywright(
@@ -62,10 +63,25 @@ async function scrapeWithPlaywrightSidecar(
       pageError: z.string().optional(),
       contentType: z.string().optional(),
       screenshot: z.string().optional(),
+      // [groundcraft] Set by a sidecar whose upstream (residential) proxy refused the tunnel.
+      proxyError: z
+        .object({ code: z.string(), upstream: z.string() })
+        .optional(),
     }),
     mock: meta.mock,
     abort: meta.abort.asSignal(),
   });
+
+  // [groundcraft] A refused tunnel is the proxy's failure, not the page's: fail the
+  // scrape truthfully and terminally. SiteError stops the waterfall — the pdf/document
+  // engines can't route around a dead proxy, and retrying them is what used to surface
+  // a proxy outage as "SCRAPE_RETRY_LIMIT (document_antibot)".
+  if (response.proxyError) {
+    throw new SiteError(
+      response.proxyError.code,
+      `The upstream proxy answered ${response.proxyError.upstream}.`,
+    );
+  }
 
   if (response.contentType?.includes("application/json")) {
     response.content = await getInnerJson(response.content);

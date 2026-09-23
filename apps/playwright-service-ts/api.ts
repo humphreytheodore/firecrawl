@@ -103,6 +103,55 @@ const buildUpstreamProxyUrl = (): string | undefined => {
   return url.toString();
 };
 
+// [groundcraft] The upstream (residential) proxy's own answer when it refuses a
+// CONNECT tunnel, keyed by target host. Chromium only ever reports
+// net::ERR_TUNNEL_CONNECTION_FAILED; proxy-chain sees the real status (402 = the
+// provider's balance is exhausted, 407 = bad credentials). Without this, every
+// refusal was flattened into a generic 500, the engine waterfalled into the
+// document engine and blamed anti-bot — IPRoyal answered 402 Payment Required for
+// ~3 weeks (to 2026-09-23) while every stealth scrape read "document_antibot".
+const PROXY_REFUSAL_TTL_MS = 60_000;
+const PROXY_NET_ERROR = /net::(ERR_TUNNEL_CONNECTION_FAILED|ERR_PROXY_CONNECTION_FAILED)/;
+const upstreamRefusals = new Map<
+  string,
+  { status: number; message: string; at: number }
+>();
+
+const recordUpstreamRefusal = (
+  hostname: string,
+  status: number,
+  message: string,
+): void => {
+  const now = Date.now();
+  for (const [host, refusal] of upstreamRefusals) {
+    if (now - refusal.at > PROXY_REFUSAL_TTL_MS) upstreamRefusals.delete(host);
+  }
+  upstreamRefusals.set(hostname.toLowerCase(), { status, message, at: now });
+};
+
+/** The upstream proxy's refusal behind a failed navigation, if that is what it was. */
+const proxyRefusalFor = (
+  url: string,
+  error: unknown,
+): { code: string; upstream: string } | null => {
+  const code = PROXY_NET_ERROR.exec(
+    error instanceof Error ? error.message : String(error),
+  )?.[1];
+  if (!code) return null;
+  let hostname: string;
+  try {
+    hostname = new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  const refusal = upstreamRefusals.get(hostname);
+  if (!refusal || Date.now() - refusal.at > PROXY_REFUSAL_TTL_MS) return null;
+  return {
+    code,
+    upstream: `HTTP ${refusal.status}${refusal.message ? ` ${refusal.message}` : ''}`,
+  };
+};
+
 const startSSRFProxy = async (): Promise<number> => {
   const server = new Server({
     port: 0,
@@ -114,9 +163,24 @@ const startSSRFProxy = async (): Promise<number> => {
           403,
         );
       }
-      return { upstreamProxyUrl: buildUpstreamProxyUrl() };
+      // customTag rides through to tunnelConnectFailed, so a refusal is attributed
+      // to the host it was for.
+      return { upstreamProxyUrl: buildUpstreamProxyUrl(), customTag: { hostname } };
     },
   });
+  // Fires only when an upstream proxy answered the CONNECT with a non-200 — i.e. only
+  // on the proxied sidecar; the direct sidecar has no upstream and never emits it.
+  server.on(
+    'tunnelConnectFailed',
+    ({ response, customTag }: { response: { statusCode?: number; statusMessage?: string }; customTag?: { hostname?: string } }) => {
+      const status = response?.statusCode ?? 0;
+      const message = response?.statusMessage ?? '';
+      console.warn(
+        `Upstream proxy refused CONNECT to ${customTag?.hostname ?? '(unknown host)'}: HTTP ${status} ${message}`.trim(),
+      );
+      if (customTag?.hostname) recordUpstreamRefusal(customTag.hostname, status, message);
+    },
+  );
   await server.listen();
   return server.port;
 };
@@ -610,6 +674,16 @@ app.post('/scrape', async (req: Request, res: Response) => {
         pageStatusCode: 403,
         pageError: error.message,
       });
+    }
+    // [groundcraft] A tunnel the upstream proxy refused is the proxy's failure — not the
+    // site's, not anti-bot. Report it structured (pageStatusCode 0 = no page answered)
+    // so the engine fails the scrape truthfully instead of waterfalling.
+    const proxyError = proxyRefusalFor(url, error);
+    if (proxyError) {
+      console.error(
+        `Scrape error: upstream proxy refused the tunnel (${proxyError.code}, proxy answered ${proxyError.upstream})`,
+      );
+      return res.json({ content: '', pageStatusCode: 0, proxyError });
     }
     console.error('Scrape error:', error);
     res
